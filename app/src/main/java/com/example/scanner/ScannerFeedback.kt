@@ -24,13 +24,15 @@ class ScannerFeedback(context: Context) {
         }
     }
 
-    private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val vibratorManager = applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-        vibratorManager?.defaultVibrator
-    } else {
-        @Suppress("DEPRECATION")
-        applicationContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-    }
+    private val vibrator: Vibrator? = runCatching {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            applicationContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }.getOrNull()
 
     fun notifyScanSuccess() {
         // 1. Bip sonore de caisse (70 ms)

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Badge
@@ -100,15 +101,17 @@ enum class MainNavigationTab {
 @Composable
 fun MainScanScreen(
     viewModel: ScanViewModel,
-    onLockSession: () -> Unit,
-    onNavigateToPairing: () -> Unit,
+    onNavigateToTableManager: () -> Unit = {},
+    onNavigateToWelcome: () -> Unit = {},
+    onNavigateToPairing: () -> Unit = {},
+    onLockSession: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var currentTab by remember { mutableStateOf(MainNavigationTab.HOME) }
+    var currentTab by remember { mutableStateOf(MainNavigationTab.SCANNER) }
     var showLotWizardDialog by remember { mutableStateOf(false) }
     var showManualSearchDialog by remember { mutableStateOf(false) }
     var showDiagnosticDialog by remember { mutableStateOf(false) }
@@ -155,10 +158,19 @@ fun MainScanScreen(
                     containerColor = BrandSlateCard,
                     titleContentColor = TextPrimary
                 ),
+                navigationIcon = {
+                    IconButton(onClick = onNavigateToWelcome) {
+                        Icon(
+                            imageVector = Icons.Default.Home,
+                            contentDescription = "Accueil",
+                            tint = TextPrimary
+                        )
+                    }
+                },
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.clickable { showOperatorSwitchDialog = true }
+                        modifier = Modifier.clickable { onNavigateToTableManager() }
                     ) {
                         Box(
                             modifier = Modifier
@@ -168,15 +180,33 @@ fun MainScanScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = uiState.lotName.ifEmpty { "Table de scan" },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(RetailEmerald.copy(alpha = 0.2f))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "#${uiState.lotId.takeLast(6).uppercase()}",
+                                        fontSize = 9.sp,
+                                        color = RetailEmerald,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                             Text(
-                                text = "E-Studio Mobile",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "${uiState.operatorName} • Lot : ${uiState.lotName}",
-                                fontSize = 11.sp,
+                                text = "${uiState.operatorName} • ${uiState.items.size} articles (${uiState.totalLabelsCount} étiquettes)",
+                                fontSize = 10.sp,
                                 color = TextSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -185,35 +215,26 @@ fun MainScanScreen(
                     }
                 },
                 actions = {
-                    // Badge état LAN / Instance
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BrandNavyDark)
-                            .clickable { showDiagnosticDialog = true }
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Bouton Réglages Scanner (S12 / S13)
+                    IconButton(
+                        onClick = { showScannerSettingsDialog = true }
                     ) {
                         Icon(
-                            imageVector = if (uiState.isLanConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                            contentDescription = "Réseau LAN",
-                            tint = if (uiState.isLanConnected) BrandSkyLight else RetailPromoAmber,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (uiState.activeInstance != null) uiState.activeInstance!!.name.take(10) else if (uiState.isLanConnected) "LAN" else "Offline",
-                            color = TextSecondary,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Réglages du scanner",
+                            tint = BrandSkyBlue
                         )
                     }
 
+                    // Bouton Mes Tables
                     IconButton(
-                        onClick = onLockSession,
-                        modifier = Modifier.testTag("lock_session_button")
+                        onClick = onNavigateToTableManager
                     ) {
-                        Icon(Icons.Default.Lock, contentDescription = "Verrouiller PIN", tint = RetailPromoAmber)
+                        Icon(
+                            imageVector = Icons.Default.Layers,
+                            contentDescription = "Mes Tables",
+                            tint = TextPrimary
+                        )
                     }
                 }
             )
@@ -521,16 +542,16 @@ fun MainScanScreen(
         )
     }
 
-    // 4. Paramètres Scanner Standard & Avancé (Points 35 & 36)
+    // 4. Paramètres Scanner Standard & Avancé
     if (showScannerSettingsDialog) {
         ScannerSettingsDialog(
-            currentScanMode = uiState.scanMode,
-            currentProfile = uiState.scannerProfile,
-            currentUnknownPolicy = uiState.unknownProductPolicy,
+            isAutoScan = uiState.isAutoScan,
+            isAutoValidate = uiState.isAutoValidate,
+            autoScanDelayMs = uiState.autoScanDelayMillis,
             soundEnabled = uiState.isSoundFeedbackEnabled,
             vibrationEnabled = uiState.isVibrationFeedbackEnabled,
-            onSaveSettings = { scanMode, profile, unknownPolicy, sound, vib ->
-                viewModel.updateScannerSettings(scanMode, profile, unknownPolicy, sound, vib)
+            onSaveSettings = { autoScan, autoValidate, autoScanDelay, sound, vib, symbologies ->
+                viewModel.saveScannerSettings(autoScan, autoValidate, autoScanDelay, sound, vib, symbologies)
                 showScannerSettingsDialog = false
             },
             onDismiss = { showScannerSettingsDialog = false }

@@ -20,7 +20,7 @@ import java.security.spec.ECGenParameterSpec
 class AndroidKeyStoreManager {
 
     private var keyStore: KeyStore? = null
-    private var jvmFallbackKeyPair: KeyPair? = null
+    private var fallbackKeyPair: KeyPair? = null
 
     companion object {
         private const val KEY_ALIAS = "ESTUDIO_DEVICE_IDENTITY_KEY"
@@ -32,40 +32,67 @@ class AndroidKeyStoreManager {
             ks.load(null)
             keyStore = ks
             ensureDeviceKeyPair()
-        } catch (_: Exception) {
-            // Environnement JVM de test unitaire : génération d'une paire EC standard en mémoire
+        } catch (_: Throwable) {
+            keyStore = null
+            fallbackKeyPair = createInMemoryKeyPair()
+        }
+    }
+
+    private fun createInMemoryKeyPair(): KeyPair {
+        return try {
             val kpg = KeyPairGenerator.getInstance("EC")
             kpg.initialize(ECGenParameterSpec("secp256r1"))
-            jvmFallbackKeyPair = kpg.generateKeyPair()
+            kpg.generateKeyPair()
+        } catch (_: Throwable) {
+            val kpg = KeyPairGenerator.getInstance("RSA")
+            kpg.initialize(2048)
+            kpg.generateKeyPair()
         }
+    }
+
+    private fun getOrCreateFallbackKeyPair(): KeyPair {
+        return fallbackKeyPair ?: createInMemoryKeyPair().also { fallbackKeyPair = it }
     }
 
     private fun ensureDeviceKeyPair() {
         val ks = keyStore ?: return
-        if (!ks.containsAlias(KEY_ALIAS)) {
-            val kpg = KeyPairGenerator.getInstance(
-                KeyProperties.KEY_ALGORITHM_EC,
-                "AndroidKeyStore"
-            )
-            val parameterSpec = KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
-            )
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .build()
+        try {
+            if (!ks.containsAlias(KEY_ALIAS)) {
+                val kpg = KeyPairGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_EC,
+                    "AndroidKeyStore"
+                )
+                val parameterSpec = KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+                )
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                    .build()
 
-            kpg.initialize(parameterSpec)
-            kpg.generateKeyPair()
+                kpg.initialize(parameterSpec)
+                kpg.generateKeyPair()
+            }
+        } catch (_: Throwable) {
+            keyStore = null
+            fallbackKeyPair = createInMemoryKeyPair()
         }
     }
 
     fun getPublicKey(): PublicKey {
         val ks = keyStore
-        return if (ks != null && ks.containsAlias(KEY_ALIAS)) {
-            ks.getCertificate(KEY_ALIAS).publicKey
-        } else {
-            jvmFallbackKeyPair!!.public
+        if (ks != null) {
+            try {
+                if (ks.containsAlias(KEY_ALIAS)) {
+                    val cert = ks.getCertificate(KEY_ALIAS)
+                    if (cert?.publicKey != null) {
+                        return cert.publicKey
+                    }
+                }
+            } catch (_: Throwable) {
+                // Fallback
+            }
         }
+        return getOrCreateFallbackKeyPair().public
     }
 
     fun getPublicKeyBase64(): String {
@@ -77,15 +104,24 @@ class AndroidKeyStoreManager {
      * Signe une chaîne brute avec la clé privée protégée dans le Keystore
      */
     fun signData(data: String): String {
-        val privateKey: PrivateKey = keyStore?.let {
-            it.getKey(KEY_ALIAS, null) as? PrivateKey
-        } ?: jvmFallbackKeyPair?.private ?: return "ERR_NO_KEY"
+        return try {
+            val privateKey: PrivateKey = keyStore?.let { ks ->
+                runCatching { ks.getKey(KEY_ALIAS, null) as? PrivateKey }.getOrNull()
+            } ?: getOrCreateFallbackKeyPair().private
 
-        val signature = Signature.getInstance("SHA256withECDSA")
-        signature.initSign(privateKey)
-        signature.update(data.toByteArray(Charsets.UTF_8))
-        val signedBytes = signature.sign()
-        return SafeBase64.encode(signedBytes)
+            val sigAlgorithm = if (privateKey.algorithm.equals("RSA", ignoreCase = true)) {
+                "SHA256withRSA"
+            } else {
+                "SHA256withECDSA"
+            }
+            val signature = Signature.getInstance(sigAlgorithm)
+            signature.initSign(privateKey)
+            signature.update(data.toByteArray(Charsets.UTF_8))
+            val signedBytes = signature.sign()
+            SafeBase64.encode(signedBytes)
+        } catch (e: Throwable) {
+            "ERR_SIGNATURE_${e.javaClass.simpleName}"
+        }
     }
 
     /**

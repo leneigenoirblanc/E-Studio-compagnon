@@ -105,6 +105,9 @@ data class ScanUiState(
     val syncMetrics: SyncMetrics = SyncMetrics(),
     val offlinePendingLotsCount: Int = 0,
     // Extensions Refonte E-Studio Mobile
+    val isAutoScan: Boolean = false,
+    val isAutoValidate: Boolean = false,
+    val enabledSymbologies: Set<String> = setOf("EAN-13", "UPC-A", "EAN-8", "UPC-E", "Code 128", "GS1-128", "ITF-14", "QR Code", "GS1 DataMatrix"),
     val scanMode: ScanMode = ScanMode.AUTO_SCAN_WITH_VALIDATION,
     val autoScanDelayMillis: Long = 800L,
     val scannerProfile: ScannerProfilePreset = ScannerProfilePreset.SUPERMARKET,
@@ -356,8 +359,23 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val resolved = productRepository.resolveBarcode(barcode)
             val state = _uiState.value
-            val currentSession = state.activeSession ?: return@launch
 
+            if (state.isSoundFeedbackEnabled) feedback.playSuccessTone()
+            if (state.isVibrationFeedbackEnabled) feedback.vibrateClick()
+
+            if (!state.isAutoValidate) {
+                // Mode avec validation : ouverture de la boîte de dialogue article
+                _uiState.update {
+                    it.copy(
+                        pendingScanBarcode = barcode,
+                        pendingScanProduct = resolved
+                    )
+                }
+                return@launch
+            }
+
+            // Mode Auto Validate : ajout direct
+            val currentSession = state.activeSession ?: return@launch
             val now = System.currentTimeMillis()
             val idempotencyKey = "idem_item_${UUID.randomUUID()}"
 
@@ -927,6 +945,182 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setAutoScan(enabled: Boolean) {
+        _uiState.update { it.copy(isAutoScan = enabled) }
+    }
+
+    fun setAutoValidate(enabled: Boolean) {
+        _uiState.update { it.copy(isAutoValidate = enabled) }
+    }
+
+    fun setAutoScanDelay(delayMs: Long) {
+        _uiState.update { it.copy(autoScanDelayMillis = delayMs) }
+    }
+
+    fun saveScannerSettings(
+        autoScan: Boolean,
+        autoValidate: Boolean,
+        autoScanDelay: Long,
+        sound: Boolean,
+        vibration: Boolean,
+        enabledSymbologies: Set<String>
+    ) {
+        _uiState.update {
+            it.copy(
+                isAutoScan = autoScan,
+                isAutoValidate = autoValidate,
+                autoScanDelayMillis = autoScanDelay,
+                isSoundFeedbackEnabled = sound,
+                isVibrationFeedbackEnabled = vibration,
+                enabledSymbologies = enabledSymbologies
+            )
+        }
+        viewModelScope.launch {
+            _events.emit(ScanEvent.ShowToast("Paramètres du scanner enregistrés"))
+        }
+    }
+
+    fun confirmScanAdd(
+        barcode: String,
+        quantity: Int,
+        templateId: String,
+        facing: Int,
+        customDesignation: String?,
+        customPrice: Double?
+    ) {
+        val resolved = _uiState.value.pendingScanProduct
+        val state = _uiState.value
+        val currentSession = state.activeSession ?: return
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val idempotencyKey = "idem_item_${UUID.randomUUID()}"
+            val productSnapshot = resolved?.snapshot?.let { snap ->
+                if (customDesignation != null) snap.copy(designation = customDesignation) else snap
+            } ?: ProductSnapshot(
+                sku = "SKU-${barcode.takeLast(6)}",
+                barcode = barcode,
+                designation = customDesignation ?: "Article non référencé ($barcode)",
+                category = "Divers",
+                department = "Rayon",
+                facing = facing
+            )
+
+            val pricing = if (customPrice != null) {
+                PricingSnapshot(
+                    regularPrice = Money.fromDouble(customPrice, "EUR"),
+                    promoPrice = null,
+                    currency = "EUR"
+                )
+            } else {
+                resolved?.pricing ?: PricingSnapshot(
+                    regularPrice = Money(199, "EUR"),
+                    promoPrice = null,
+                    currency = "EUR"
+                )
+            }
+
+            val templateName = AVAILABLE_TEMPLATES.find { it.id == templateId }?.name ?: templateId
+            val instructions = listOf(
+                PrintInstruction(
+                    templateId = templateId,
+                    templateName = templateName,
+                    quantity = quantity
+                )
+            )
+
+            val existingIndex = currentSession.items.indexOfFirst { it.barcode == barcode }
+            val updatedItems = currentSession.items.toMutableList()
+
+            if (existingIndex >= 0 && state.duplicateRule == DuplicateRule.INCREMENT_QTY) {
+                val existing = updatedItems[existingIndex]
+                updatedItems[existingIndex] = existing.copy(
+                    quantity = existing.quantity + quantity,
+                    facing = facing,
+                    instructions = instructions,
+                    capturedAt = now
+                )
+            } else {
+                val newItem = ScanItem(
+                    id = "scan_${System.currentTimeMillis()}_${(100..999).random()}",
+                    barcode = barcode,
+                    quantity = quantity,
+                    facing = facing,
+                    instructions = instructions,
+                    capturedAt = now,
+                    source = ScanSource.CAMERA_MLKIT,
+                    productSnapshot = productSnapshot,
+                    pricing = pricing,
+                    status = ScanItemStatus.VALIDATED,
+                    idempotencyKey = idempotencyKey
+                )
+                updatedItems.add(0, newItem)
+            }
+
+            workSessionRepository.saveSession(currentSession.copy(items = updatedItems, updatedAt = now))
+
+            if (state.isSoundFeedbackEnabled) feedback.playSuccessTone()
+            if (state.isVibrationFeedbackEnabled) feedback.vibrateClick()
+
+            _uiState.update {
+                it.copy(
+                    pendingScanBarcode = null,
+                    pendingScanProduct = null,
+                    statusMessage = "✓ ${productSnapshot.designation} (${quantity}x)"
+                )
+            }
+        }
+    }
+
+    fun updateExistingScanItem(
+        itemId: String,
+        quantity: Int,
+        templateId: String,
+        facing: Int,
+        customDesignation: String?,
+        customPrice: Double?
+    ) {
+        val currentSession = _uiState.value.activeSession ?: return
+
+        viewModelScope.launch {
+            val updatedItems = currentSession.items.mapNotNull { item ->
+                if (item.id == itemId) {
+                    if (quantity <= 0) null
+                    else {
+                        val updatedSnapshot = if (customDesignation != null) {
+                            item.productSnapshot?.copy(designation = customDesignation)
+                        } else item.productSnapshot
+
+                        val updatedPricing = if (customPrice != null) {
+                            item.pricing?.copy(regularPrice = Money.fromDouble(customPrice, "EUR"))
+                        } else item.pricing
+
+                        val templateName = AVAILABLE_TEMPLATES.find { it.id == templateId }?.name ?: templateId
+                        val updatedInstructions = listOf(
+                            PrintInstruction(
+                                templateId = templateId,
+                                templateName = templateName,
+                                quantity = quantity
+                            )
+                        )
+
+                        item.copy(
+                            quantity = quantity,
+                            facing = facing,
+                            instructions = updatedInstructions,
+                            productSnapshot = updatedSnapshot,
+                            pricing = updatedPricing,
+                            capturedAt = System.currentTimeMillis()
+                        )
+                    }
+                } else item
+            }
+
+            workSessionRepository.saveSession(currentSession.copy(items = updatedItems, updatedAt = System.currentTimeMillis()))
+            _events.emit(ScanEvent.ShowToast("Article mis à jour avec succès"))
+        }
+    }
+
     fun onPendingScanConfirmed(
         quantity: Int,
         templateId: String,
@@ -1026,6 +1220,86 @@ class ScanViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    fun createTableAndOpen(
+        name: String,
+        colorTag: String = "BLUE",
+        department: String = "Épicerie",
+        templateId: String = "template_38x70",
+        onCreated: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val lot = lotRepository.createNewLot(
+                name = name,
+                department = department,
+                targetTemplateId = templateId,
+                operatorName = _uiState.value.operatorName,
+                profilePreset = "prof_rayon",
+                isPromo = false,
+                requiresTemplate = false,
+                requiresQuantity = false,
+                catalogVersion = _uiState.value.catalogSyncInfo.localVersion
+            )
+            // Associer couleur de tag
+            val updatedLot = lot.copy(colorTag = colorTag)
+            lotRepository.saveActiveLot(updatedLot)
+
+            val session = workSessionRepository.createNewSession(
+                name = name,
+                operatorName = _uiState.value.operatorName,
+                deviceName = _uiState.value.deviceName
+            )
+            applySessionToState(session)
+            _uiState.update { it.copy(activeLotData = updatedLot, isLotLocked = false) }
+            _events.emit(ScanEvent.ShowToast("Table \"$name\" (#${updatedLot.id.takeLast(6).uppercase()}) prête au scan"))
+            onCreated()
+        }
+    }
+
+    fun openLotInScanner(lot: MobileScanLot, onOpened: () -> Unit = {}) {
+        viewModelScope.launch {
+            lotRepository.saveActiveLot(lot)
+            val session = workSessionRepository.createNewSession(
+                name = lot.name,
+                operatorName = lot.operatorName,
+                deviceName = _uiState.value.deviceName
+            )
+            // Charger les items existants du lot dans la session
+            val convertedItems = lot.items.map { item ->
+                ScanItem(
+                    id = item.id,
+                    barcode = item.code,
+                    quantity = item.quantity,
+                    facing = item.facing,
+                    instructions = if (item.instructions.isNotEmpty()) item.instructions else listOf(
+                        PrintInstruction(
+                            templateId = item.templateId ?: "template_38x70",
+                            templateName = AVAILABLE_TEMPLATES.find { it.id == item.templateId }?.name ?: "Rayon 38x70",
+                            quantity = item.quantity
+                        )
+                    ),
+                    capturedAt = System.currentTimeMillis(),
+                    source = ScanSource.CAMERA_MLKIT,
+                    productSnapshot = ProductSnapshot(
+                        sku = item.code,
+                        barcode = item.code,
+                        designation = item.designation ?: "Article",
+                        category = item.department ?: "Épicerie",
+                        department = lot.department
+                    ),
+                    pricing = item.price?.let {
+                        PricingSnapshot(regularPrice = Money.fromDouble(it, "EUR"))
+                    },
+                    idempotencyKey = UUID.randomUUID().toString()
+                )
+            }
+            workSessionRepository.saveSession(session.copy(items = convertedItems))
+            applySessionToState(session.copy(items = convertedItems))
+            _uiState.update { it.copy(activeLotData = lot, isLotLocked = lot.isLocked) }
+            onOpened()
+        }
+    }
 }
+
 
 

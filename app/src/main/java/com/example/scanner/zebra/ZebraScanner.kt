@@ -54,12 +54,15 @@ class ZebraScanner(private val context: Context) : BarcodeScanner {
                 addAction("com.symbol.datawedge.data.ACTION")
                 addCategory(Intent.CATEGORY_DEFAULT)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
-            } else {
-                ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
+                } else {
+                    @Suppress("UnspecifiedRegisterReceiverFlag")
+                    context.registerReceiver(receiver, filter)
+                }
+                isRegistered = true
             }
-            isRegistered = true
         }
     }
 

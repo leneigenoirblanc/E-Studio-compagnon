@@ -15,11 +15,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,7 +26,6 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -58,6 +54,9 @@ import java.util.concurrent.Executors
 @Composable
 fun CameraScannerView(
     modifier: Modifier = Modifier,
+    isAutoScan: Boolean = false,
+    autoScanDelayMs: Long = 800L,
+    manualScanTrigger: Long = 0L,
     isTorchOn: Boolean = false,
     onBarcodeDetected: (String, Int) -> Unit,
     onToggleTorch: () -> Unit
@@ -66,9 +65,21 @@ fun CameraScannerView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
     var camera by remember { mutableStateOf<Camera?>(null) }
+    var analyzerRef by remember { mutableStateOf<BarcodeAnalyzer?>(null) }
 
     LaunchedEffect(isTorchOn, camera) {
         camera?.cameraControl?.enableTorch(isTorchOn)
+    }
+
+    LaunchedEffect(isAutoScan, autoScanDelayMs) {
+        analyzerRef?.isAutoScanEnabled = isAutoScan
+        analyzerRef?.autoScanDelayMs = autoScanDelayMs
+    }
+
+    LaunchedEffect(manualScanTrigger) {
+        if (manualScanTrigger > 0L) {
+            analyzerRef?.triggerManualScan()
+        }
     }
 
     DisposableEffect(Unit) {
@@ -97,27 +108,30 @@ fun CameraScannerView(
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
+                    runCatching {
+                        val cameraProvider = cameraProviderFuture.get()
 
-                    val preview = Preview.Builder().build().also {
-                        it.surfaceProvider = previewView.surfaceProvider
-                    }
-
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                        .also { analysis ->
-                            analysis.setAnalyzer(
-                                cameraExecutor,
-                                BarcodeAnalyzer { code, format ->
-                                    onBarcodeDetected(code, format)
-                                }
-                            )
+                        val preview = Preview.Builder().build().also {
+                            it.surfaceProvider = previewView.surfaceProvider
                         }
 
-                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                        val analyzer = BarcodeAnalyzer(
+                            isAutoScanEnabled = isAutoScan,
+                            autoScanDelayMs = autoScanDelayMs
+                        ) { code, format ->
+                            onBarcodeDetected(code, format)
+                        }
+                        analyzerRef = analyzer
 
-                    runCatching {
+                        val imageAnalysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build()
+                            .also { analysis ->
+                                analysis.setAnalyzer(cameraExecutor, analyzer)
+                            }
+
+                        val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
                         cameraProvider.unbindAll()
                         camera = cameraProvider.bindToLifecycle(
                             lifecycleOwner,
@@ -135,7 +149,8 @@ fun CameraScannerView(
 
         // Overlay de visée avec coins et laser animé
         ScannerLaserOverlay(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            isActive = isAutoScan
         )
 
         // Bouton Flash / Torche
@@ -143,8 +158,8 @@ fun CameraScannerView(
             onClick = onToggleTorch,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp)
-                .size(44.dp)
+                .padding(10.dp)
+                .size(40.dp)
                 .testTag("torch_toggle_button"),
             colors = IconButtonDefaults.iconButtonColors(
                 containerColor = if (isTorchOn) Color(0xFFFBBF24) else Color(0x66000000),
@@ -157,32 +172,35 @@ fun CameraScannerView(
             )
         }
 
-        // Badge Haute Cadence 60 FPS / ML Kit
+        // Badge Statut Mode
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(12.dp)
-                .background(Color(0x990F172A), RoundedCornerShape(8.dp))
+                .padding(10.dp)
+                .background(Color(0xCC0F172A), RoundedCornerShape(8.dp))
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Text(
-                text = "ML Kit • 60 FPS • Autofocus",
-                color = Color(0xFF38BDF8),
+                text = if (isAutoScan) "AUTO SCAN ACTIF (${autoScanDelayMs}ms)" else "MODE MANUEL • APPUYER SUR SCAN",
+                color = if (isAutoScan) Color(0xFF34D399) else Color(0xFF38BDF8),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Bold
             )
         }
     }
 }
 
 @Composable
-fun ScannerLaserOverlay(modifier: Modifier = Modifier) {
+fun ScannerLaserOverlay(
+    modifier: Modifier = Modifier,
+    isActive: Boolean = true
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "laser_transition")
     val laserProgress by infiniteTransition.animateFloat(
         initialValue = 0.15f,
         targetValue = 0.85f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
+            animation = tween(1100, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "laser_position"
@@ -193,34 +211,36 @@ fun ScannerLaserOverlay(modifier: Modifier = Modifier) {
         val height = size.height
 
         // Cadre central de visée
-        val boxWidth = width * 0.78f
-        val boxHeight = height * 0.70f
+        val boxWidth = width * 0.82f
+        val boxHeight = height * 0.72f
         val left = (width - boxWidth) / 2f
         val top = (height - boxHeight) / 2f
         val right = left + boxWidth
         val bottom = top + boxHeight
 
         // Ligne laser animée
-        val laserY = top + (boxHeight * laserProgress)
-        drawLine(
-            brush = Brush.horizontalGradient(
-                colors = listOf(
-                    Color.Transparent,
-                    Color(0xFF22D3EE),
-                    Color(0xFF06B6D4),
-                    Color(0xFF22D3EE),
-                    Color.Transparent
-                )
-            ),
-            start = Offset(left + 16f, laserY),
-            end = Offset(right - 16f, laserY),
-            strokeWidth = 5f
-        )
+        if (isActive) {
+            val laserY = top + (boxHeight * laserProgress)
+            drawLine(
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0xFF22D3EE),
+                        Color(0xFF10B981),
+                        Color(0xFF22D3EE),
+                        Color.Transparent
+                    )
+                ),
+                start = Offset(left + 14f, laserY),
+                end = Offset(right - 14f, laserY),
+                strokeWidth = 4f
+            )
+        }
 
-        // Coins du réticule de visée (Coins verts/cyan retail)
-        val cornerLength = 36f
-        val cornerStroke = 7f
-        val cornerColor = Color(0xFF38BDF8)
+        // Coins du réticule de visée
+        val cornerLength = 32f
+        val cornerStroke = 6f
+        val cornerColor = if (isActive) Color(0xFF10B981) else Color(0xFF38BDF8)
 
         // Haut-Gauche
         drawLine(cornerColor, Offset(left, top), Offset(left + cornerLength, top), cornerStroke)

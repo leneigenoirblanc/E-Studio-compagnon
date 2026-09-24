@@ -9,6 +9,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import com.example.domain.model.ScanSource
+import com.example.scanner.ScannerFeedback
 import com.example.scanner.camera.CameraScanner
 import com.example.scanner.honeywell.HoneywellScanner
 import com.example.scanner.zebra.ZebraScanner
@@ -24,6 +25,7 @@ class ScannerManager(private val context: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val antiDoubleScan = AntiDoubleScanFilter(debounceThresholdMs = 800L)
+    private val feedback = ScannerFeedback(context)
 
     val cameraScanner = CameraScanner()
     val zebraScanner = ZebraScanner(context)
@@ -31,10 +33,6 @@ class ScannerManager(private val context: Context) {
 
     private val _unifiedScans = MutableSharedFlow<BarcodeScan>(extraBufferCapacity = 100)
     val unifiedScans: Flow<BarcodeScan> = _unifiedScans.asSharedFlow()
-
-    private var toneGenerator: ToneGenerator? = runCatching {
-        ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
-    }.getOrNull()
 
     init {
         // Collecter depuis la Caméra
@@ -86,23 +84,6 @@ class ScannerManager(private val context: Context) {
     }
 
     private fun triggerFeedback() {
-        // Bip audio caisse enregistreuse / terminal durci
-        runCatching {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 75)
-        }
-        // Vibration haptique
-        runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(45, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-                @Suppress("DEPRECATION")
-                vibrator?.vibrate(45)
-            }
-        }
+        feedback.notifyScanSuccess()
     }
 }

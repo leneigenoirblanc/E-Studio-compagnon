@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.Warning
@@ -95,8 +97,7 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
 /**
- * Points 17, 18, 19, 20, 21, 22, 23, 24, 27, 28, 29, 41
- * Gestionnaire complet des Lots d'impression et de l'exécution terrain
+ * S06 : Gestionnaire complet des Lots et Tables de scan
  */
 @Composable
 fun LotsManagerTab(
@@ -106,6 +107,7 @@ fun LotsManagerTab(
     onOpenTrashDialog: () -> Unit,
     onOpenValidationDialog: (MobileScanLot?) -> Unit,
     onNavigateToScanner: () -> Unit = {},
+    onBackToWelcome: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedSubTab by remember { mutableIntStateOf(0) } // 0 = Lot en cours, 1 = Tous mes lots
@@ -116,7 +118,57 @@ fun LotsManagerTab(
             .fillMaxSize()
             .background(BrandNavyDark)
     ) {
-        // En-tête avec bascule "LOT EN COURS" / "TOUS MES LOTS"
+        // En-tête avec bouton retour vers l'accueil
+        Surface(
+            color = BrandSlateCard,
+            border = BorderStroke(1.dp, BrandSlateBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBackToWelcome) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Accueil",
+                            tint = TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Text(
+                            text = "Gestion des Tables & Lots",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${uiState.allLotsList.size} table(s) dans la base locale",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onOpenLotWizard,
+                    colors = ButtonDefaults.buttonColors(containerColor = RetailEmerald),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("+ CRÉER", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                }
+            }
+        }
+
+        // Bascule "TABLE EN COURS" / "TOUTES MES TABLES"
         Surface(
             color = BrandSlateCard,
             border = BorderStroke(1.dp, BrandSlateBorder),
@@ -134,7 +186,7 @@ fun LotsManagerTab(
                         onClick = { selectedSubTab = 0 },
                         text = {
                             Text(
-                                text = "LOT EN COURS (${uiState.items.size})",
+                                text = "TABLE ACTIVE (${uiState.items.size})",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -145,7 +197,7 @@ fun LotsManagerTab(
                         onClick = { selectedSubTab = 1 },
                         text = {
                             Text(
-                                text = "MES LOTS (${uiState.allLotsList.size})",
+                                text = "TOUTES LES TABLES (${uiState.allLotsList.size})",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -157,10 +209,11 @@ fun LotsManagerTab(
 
         when (selectedSubTab) {
             0 -> {
-                // SOUS-ONGLET 1 : LOT EN COURS
+                // SOUS-ONGLET 1 : TABLE EN COURS
                 ActiveLotSubView(
                     viewModel = viewModel,
                     uiState = uiState,
+                    onNavigateToScanner = onNavigateToScanner,
                     onOpenValidationDialog = {
                         val activeLot = uiState.activeLotData ?: MobileScanLot(
                             id = uiState.lotId,
@@ -174,7 +227,7 @@ fun LotsManagerTab(
                 )
             }
             1 -> {
-                // SOUS-ONGLET 2 : TOUS MES LOTS
+                // SOUS-ONGLET 2 : TOUTES MES TABLES
                 AllLotsSubView(
                     allLots = uiState.allLotsList,
                     trashCount = uiState.trashLotsList.size,
@@ -184,7 +237,12 @@ fun LotsManagerTab(
                     onCloneLot = { lot -> viewModel.cloneLot(lot) },
                     onMergeLot = { lot -> showMergePickerForLot = lot },
                     onDeleteLot = { id -> viewModel.softDeleteLot(id) },
-                    onValidateLot = { lot -> onOpenValidationDialog(lot) }
+                    onValidateLot = { lot -> onOpenValidationDialog(lot) },
+                    onOpenInScanner = { lot ->
+                        viewModel.openLotInScanner(lot) {
+                            onNavigateToScanner()
+                        }
+                    }
                 )
             }
         }
@@ -208,6 +266,7 @@ fun LotsManagerTab(
 private fun ActiveLotSubView(
     viewModel: ScanViewModel,
     uiState: ScanUiState,
+    onNavigateToScanner: () -> Unit = {},
     onOpenValidationDialog: () -> Unit
 ) {
     val totalArticles = uiState.items.size
@@ -219,7 +278,7 @@ private fun ActiveLotSubView(
     val isLocked = uiState.isLotLocked
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // En-tête du lot avec nom, verrouillage (Point 23) et progression visuelle (Point 21)
+        // En-tête du lot avec nom, verrouillage et bouton direct pour scanner
         Card(
             colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
             shape = RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp),
@@ -254,22 +313,36 @@ private fun ActiveLotSubView(
                             }
                         }
                         Text(
-                            text = "Opérateur : ${uiState.operatorName} • Gabarit : ${uiState.selectedTemplate.name}",
+                            text = "Table #${uiState.lotId.takeLast(6).uppercase()} • Opérateur : ${uiState.operatorName} • Gabarit : ${uiState.selectedTemplate.name}",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
                     }
 
-                    // Bouton Verrouiller / Déverrouiller (Point 23)
-                    IconButton(
-                        onClick = { viewModel.lockCurrentLot(!isLocked) },
-                        modifier = Modifier.size(32.dp).testTag("btn_lock_lot")
-                    ) {
-                        Icon(
-                            imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
-                            contentDescription = "Verrouillage lecture seule",
-                            tint = if (isLocked) RetailPromoAmber else BrandSkyLight
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.lockCurrentLot(!isLocked) },
+                            modifier = Modifier.size(32.dp).testTag("btn_lock_lot")
+                        ) {
+                            Icon(
+                                imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                contentDescription = "Verrouillage",
+                                tint = if (isLocked) RetailPromoAmber else BrandSkyLight
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(6.dp))
+
+                        Button(
+                            onClick = onNavigateToScanner,
+                            colors = ButtonDefaults.buttonColors(containerColor = BrandSkyBlue),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.QrCode, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("SCANNER", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                        }
                     }
                 }
 
@@ -492,7 +565,8 @@ private fun AllLotsSubView(
     onCloneLot: (MobileScanLot) -> Unit,
     onMergeLot: (MobileScanLot) -> Unit,
     onDeleteLot: (String) -> Unit,
-    onValidateLot: (MobileScanLot) -> Unit
+    onValidateLot: (MobileScanLot) -> Unit,
+    onOpenInScanner: (MobileScanLot) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
         // Barre supérieure : Nouveau lot + Corbeille
@@ -509,7 +583,7 @@ private fun AllLotsSubView(
             ) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("+ NOUVEAU LOT", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("+ NOUVELLE TABLE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
             OutlinedButton(
@@ -532,7 +606,7 @@ private fun AllLotsSubView(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Aucun lot enregistré dans la base locale.", fontSize = 12.sp, color = TextSecondary)
+                Text("Aucune table enregistrée dans la base locale.", fontSize = 12.sp, color = TextSecondary)
             }
         } else {
             LazyColumn(
@@ -546,7 +620,8 @@ private fun AllLotsSubView(
                         onClone = { onCloneLot(lot) },
                         onMerge = { onMergeLot(lot) },
                         onDelete = { onDeleteLot(lot.id) },
-                        onValidate = { onValidateLot(lot) }
+                        onValidate = { onValidateLot(lot) },
+                        onOpenInScanner = { onOpenInScanner(lot) }
                     )
                 }
             }
@@ -561,7 +636,8 @@ private fun SavedLotCard(
     onClone: () -> Unit,
     onMerge: () -> Unit,
     onDelete: () -> Unit,
-    onValidate: () -> Unit
+    onValidate: () -> Unit,
+    onOpenInScanner: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
@@ -576,12 +652,14 @@ private fun SavedLotCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Tag coloré du profil (Point 18)
+                    // Tag coloré du profil
                     val (tagColor, tagLabel) = when (lot.colorTag.uppercase()) {
-                        "PROMO" -> RetailPromoAmber to "PROMO"
-                        "URGENT" -> RetailErrorRed to "URGENT"
-                        "INVENTAIRE" -> Color(0xFFA855F7) to "INVENTAIRE"
-                        else -> BrandSkyBlue to "RAYON"
+                        "PROMO", "AMBER" -> RetailPromoAmber to "PROMO"
+                        "URGENT", "RED" -> RetailErrorRed to "DÉMARQUE"
+                        "INVENTAIRE", "PURPLE" -> Color(0xFFA855F7) to "HYGIÈNE"
+                        "GREEN" -> RetailEmerald to "ÉPICERIE"
+                        "ORANGE" -> Color(0xFFF97316) to "LIQUIDES"
+                        else -> BrandSkyBlue to "RAYON FRAIS"
                     }
 
                     Box(
@@ -596,7 +674,7 @@ private fun SavedLotCard(
                     Spacer(modifier = Modifier.width(6.dp))
 
                     Text(
-                        text = "V${lot.version}",
+                        text = "#${lot.id.takeLast(6).uppercase()}",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary
@@ -604,7 +682,7 @@ private fun SavedLotCard(
                 }
 
                 Row {
-                    // Bouton Épingler (Point 27)
+                    // Bouton Épingler
                     IconButton(onClick = onTogglePin, modifier = Modifier.size(28.dp)) {
                         Icon(
                             Icons.Default.PushPin,
@@ -613,11 +691,11 @@ private fun SavedLotCard(
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    // Cloner (Point 28)
+                    // Cloner
                     IconButton(onClick = onClone, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.ContentCopy, contentDescription = "Cloner", tint = TextSecondary, modifier = Modifier.size(16.dp))
                     }
-                    // Fusionner (Point 29)
+                    // Fusionner
                     IconButton(onClick = onMerge, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.CallMerge, contentDescription = "Fusionner", tint = TextSecondary, modifier = Modifier.size(16.dp))
                     }
@@ -643,22 +721,32 @@ private fun SavedLotCard(
                 color = TextSecondary
             )
 
-            Text(
-                text = "Catalogue : ${lot.catalogVersion} • Créé le ${lot.createdAt.take(10)}",
-                fontSize = 10.sp,
-                color = BrandSkyLight.copy(alpha = 0.7f)
-            )
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Button(
-                onClick = onValidate,
-                colors = ButtonDefaults.buttonColors(containerColor = BrandNavyDark),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, BrandSlateBorder),
-                modifier = Modifier.fillMaxWidth().height(36.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("OUVRIR LE DIAGNOSTIC & EXPORTER CE LOT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = BrandSkyLight)
+                Button(
+                    onClick = onOpenInScanner,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandSkyBlue),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(36.dp)
+                ) {
+                    Icon(Icons.Default.QrCode, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("SCANNER", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = Color.Black)
+                }
+
+                Button(
+                    onClick = onValidate,
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandNavyDark),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, BrandSlateBorder),
+                    modifier = Modifier.weight(1.3f).height(36.dp)
+                ) {
+                    Text("EXPORTER / JSON", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = BrandSkyLight)
+                }
             }
         }
     }
