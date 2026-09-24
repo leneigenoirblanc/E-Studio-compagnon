@@ -18,5 +18,17 @@ data class LotEntity(
     val syncMethod: String,
     val itemsJson: String,
     val isTransferred: Boolean = false,
-    val transferredAt: String? = null
+    val transferredAt: String? = null,
+    val description: String = "",
+    val version: Int = 1,
+    val department: String = "Épicerie",
+    val colorTag: String = "NORMAL",
+    val catalogVersion: String = "2026.09.24.01",
+    val isLocked: Boolean = false,
+    val isPinned: Boolean = false,
+    val isDeleted: Boolean = false,
+    val deletedAt: Long? = null,
+    val duplicateRule: String = "INCREMENT_QTY",
+    val requiresTemplate: Boolean = true,
+    val requiresQuantity: Boolean = true
 )

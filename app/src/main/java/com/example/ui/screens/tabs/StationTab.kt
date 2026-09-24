@@ -19,13 +19,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Dns
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
@@ -83,269 +86,265 @@ fun StationTab(
         modifier = modifier
             .fillMaxSize()
             .background(BrandNavyDark)
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(14.dp)
+            .verticalScroll(rememberScrollState())
     ) {
-        // En-tête Station
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(BrandSkyBlue),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Dns,
-                    contentDescription = null,
-                    tint = TextPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Poste E-Studio & Terminal",
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Configuration réseau LAN et matériel",
-                    color = TextSecondary,
-                    fontSize = 12.sp
-                )
-            }
-        }
-
-        // 1. Carte Poste E-Studio Appairé
+        // 1. Identité Terminal & Opérateur Séparée
         Card(
             colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
             shape = RoundedCornerShape(16.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, BrandSlateBorder),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "CONNEXION SPOOLER E-STUDIO",
-                        color = TextSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (uiState.isLanConnected) RetailEmerald.copy(alpha = 0.15f) else RetailPromoAmber.copy(alpha = 0.15f))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(CircleShape)
-                                    .background(if (uiState.isLanConnected) RetailEmerald else RetailPromoAmber)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(BrandSkyBlue.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Devices, contentDescription = null, tint = BrandSkyLight, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
                             Text(
-                                text = if (uiState.isLanConnected) "LAN ACTIF" else "HORS LIGNE",
-                                color = if (uiState.isLanConnected) RetailEmerald else RetailPromoAmber,
-                                fontSize = 10.sp,
+                                text = "Terminal : ${uiState.deviceProfile.deviceId}",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
+                            Text(
+                                text = "${uiState.deviceProfile.model} • ${uiState.deviceProfile.storeId}",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
                         }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(RetailEmerald.copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text("ENRÔLÉ", color = RetailEmerald, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    InfoLine(label = "Hôte LAN :", value = "${config.serverHost}:${config.serverPort}")
-                    InfoLine(label = "Instance Magasin :", value = config.instanceId)
-                    InfoLine(label = "Jeton de Session :", value = "${config.token.take(8)}... (Valide 30 jours)")
-                    InfoLine(label = "Protocole :", value = "SHA-256 HMAC Signature")
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BrandSlateDark)
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Opérateur Assigné :", color = TextSecondary, fontSize = 10.sp)
+                        Text(uiState.operatorName, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(BrandSkyBlue.copy(alpha = 0.2f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(uiState.deviceProfile.userRole.name, color = BrandSkyLight, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 2. Sécurité Matérielle Android Keystore & Signature Numérique
+        Card(
+            colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, BrandSlateBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Key, contentDescription = null, tint = RetailPromoAmber, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sécurité Cryptographique Matérielle", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Type de Clé :", color = TextSecondary, fontSize = 11.sp)
+                    Text("EC secp256r1 (AndroidKeyStore)", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Signature Requêtes :", color = TextSecondary, fontSize = 11.sp)
+                    Text("SHA256withECDSA Active", color = RetailEmerald, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Idempotency Protocol :", color = TextSecondary, fontSize = 11.sp)
+                    Text("Idempotency-Key v1.0", color = BrandSkyLight, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // 3. Télémétrie, Observabilité et Gestion de Parc
+        Card(
+            colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
+            shape = RoundedCornerShape(14.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, BrandSlateBorder),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Speed, contentDescription = null, tint = BrandSkyLight, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Métriques et Diagnostic Parc", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = onNavigateToPairing,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = BrandSkyLight),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Changer de poste", fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-
-        // 2. Carte Terminal & Scanner Matériel
-        Card(
-            colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, BrandSlateBorder),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "ACQUISITION & MATÉRIEL DURCI",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Batterie
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(BrandSlateDark),
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BrandSlateDark)
+                            .padding(8.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Devices,
-                            contentDescription = null,
-                            tint = RetailEmerald,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${uiState.deviceProfile.batteryPercent}%", color = RetailEmerald, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Batterie", color = TextSecondary, fontSize = 10.sp)
+                        }
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = "Zebra DataWedge & Honeywell",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
-                        Text(
-                            text = "Diffusion Intent active en arrière-plan",
-                            color = RetailEmerald,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+
+                    // Latence ACK Serveur
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BrandSlateDark)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${uiState.syncMetrics.averageAckTimeMs} ms", color = BrandSkyLight, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Latence ACK", color = TextSecondary, fontSize = 10.sp)
+                        }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Bouton de test Bip sonore + Haptique caisse
-                Button(
-                    onClick = {
-                        feedback.notifyScanSuccess()
-                        testFeedbackCount++
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = BrandSlateDark),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.VolumeUp,
-                        contentDescription = null,
-                        tint = BrandSkyLight,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Tester Bip Caisse & Vibreur ${if (testFeedbackCount > 0) "($testFeedbackCount)" else ""}",
-                        color = TextPrimary,
-                        fontSize = 12.sp
-                    )
+                    // Taux succès Sync
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BrandSlateDark)
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("${uiState.syncMetrics.successfulSyncsToday}", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Syncs Réussies", color = TextSecondary, fontSize = 10.sp)
+                        }
+                    }
                 }
             }
         }
 
-        // 3. Carte Paramètres du Lot & Sécurité PIN
-        Card(
-            colors = CardDefaults.cardColors(containerColor = BrandSlateCard),
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, BrandSlateBorder),
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // 4. Actions Rapides Matériel & Session
+        Text("ACTIONS DU TERMINAL", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Changer d'Opérateur
+        Button(
+            onClick = onOpenSettingsDialog,
+            colors = ButtonDefaults.buttonColors(containerColor = BrandSlateDark),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("btn_switch_operator")
+        ) {
+            Icon(Icons.Default.Devices, contentDescription = null, tint = BrandSkyLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Changement d'Opérateur / Prise de Poste", color = TextPrimary, fontSize = 12.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Test Bip & Haptique
+        Button(
+            onClick = {
+                viewModel.testAudioBeep()
+                testFeedbackCount++
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = BrandSlateDark),
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "SÉCURITÉ & OPÉRATEUR",
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp
-                )
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    InfoLine(label = "Nom du lot actuel :", value = uiState.lotName)
-                    InfoLine(label = "Opérateur affecté :", value = uiState.operatorName)
-                    InfoLine(label = "Gabarit par défaut :", value = uiState.selectedTemplate.name)
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onOpenSettingsDialog,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Modifier Lot", fontSize = 12.sp)
-                    }
-
-                    Button(
-                        onClick = onLockSession,
-                        modifier = Modifier.weight(1f).testTag("lock_station_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = RetailPromoAmber),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = null,
-                            tint = BrandNavyDark,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Verrouiller PIN", color = BrandNavyDark, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    }
-                }
-            }
+            Icon(Icons.Default.VolumeUp, contentDescription = null, tint = BrandSkyLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Tester le Bip Laser et la Vibration Haptique", color = TextPrimary, fontSize = 12.sp)
         }
-    }
-}
 
-@Composable
-fun InfoLine(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, color = TextSecondary, fontSize = 12.sp)
-        Text(
-            text = value,
-            color = TextPrimary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Verrouiller la session (Code PIN)
+        Button(
+            onClick = onLockSession,
+            colors = ButtonDefaults.buttonColors(containerColor = BrandSlateDark),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("btn_lock_session")
+        ) {
+            Icon(Icons.Default.Lock, contentDescription = null, tint = RetailPromoAmber, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Verrouiller le Terminal (Code PIN)", color = TextPrimary, fontSize = 12.sp)
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Réappairer via QR Code OTT
+        OutlinedButton(
+            onClick = onNavigateToPairing,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("btn_re_pairing")
+        ) {
+            Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = BrandSkyLight, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Scanner un Nouveau QR Code d'Appairage E-Studio", color = BrandSkyLight, fontSize = 12.sp)
+        }
     }
 }

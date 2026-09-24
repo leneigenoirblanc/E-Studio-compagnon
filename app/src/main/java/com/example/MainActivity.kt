@@ -47,7 +47,13 @@ class MainActivity : ComponentActivity() {
 
         // Initialisation du récepteur DataWedge pour Zebra et terminaux durcis
         dataWedgeReceiver = DataWedgeReceiver { code, symbology ->
-            scanViewModel.onBarcodeScanned(code, symbology)
+            if (!code.isNullOrBlank()) {
+                scanViewModel.onBarcodeScanned(
+                    code,
+                    symbology ?: "EAN_13",
+                    com.example.domain.model.ScanSource.ZEBRA_DATAWEDGE
+                )
+            }
         }
 
         // Vérifier si un code-barres a été passé via l'Intent de lancement

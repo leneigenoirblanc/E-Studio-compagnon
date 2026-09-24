@@ -67,4 +67,18 @@ class ScannerFeedback(context: Context) {
         toneGenerator?.release()
         toneGenerator = null
     }
+
+    fun playSuccessTone() = notifyScanSuccess()
+    fun playErrorTone() = notifyError()
+
+    fun vibrateClick() {
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator?.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator?.vibrate(35)
+            }
+        }
+    }
 }
