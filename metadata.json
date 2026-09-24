@@ -1,0 +1,8 @@
+{
+  "name": "E-Studio Scan",
+  "description": "Terminal mobile compagnon E-Studio pour scan haute cadence et impression d'étiquettes de prix et balisage magasin.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
